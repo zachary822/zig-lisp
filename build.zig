@@ -84,6 +84,10 @@ pub fn build(b: *std.Build) void {
         .target = target,
         .optimize = optimize,
     });
+    exe_unit_tests.linkLibC();
+    exe_unit_tests.addCSourceFile(.{ .file = .{ .cwd_relative = "./include/mpc/mpc.c" } });
+    exe_unit_tests.linkSystemLibrary("readline");
+    exe_unit_tests.addIncludePath(.{ .cwd_relative = "./include" });
 
     const run_exe_unit_tests = b.addRunArtifact(exe_unit_tests);
 
