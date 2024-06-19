@@ -86,6 +86,10 @@ pub fn main() !void {
     _ = c.read_history(".history");
 
     while (true) {
+        var arena = std.heap.ArenaAllocator.init(allocator);
+        defer arena.deinit();
+        const aa = arena.allocator();
+
         const input = c.readline("lisp> ");
         defer std.c.free(input);
 
@@ -101,7 +105,7 @@ pub fn main() !void {
             const nnodes = numberOfNodes(ast);
             try stdout.print("number of nodes: {d}\n", .{nnodes});
 
-            const thing = try lvalRead(allocator, ast);
+            const thing = try lvalRead(aa, ast);
             // defer thing.deinit();
 
             try lvalPrint(stdout, thing);
@@ -166,7 +170,7 @@ test "does the lvalEvalSexpr even work" {
     try arr.append(lval1);
     try arr.append(lval2);
     const lval = try Lval.init(allocator, .{ .lvals = arr });
-    defer lval.deinit(); // bad
+    // defer lval.deinit(); // bad
 
     var arr2 = std.ArrayList(*Lval).init(allocator);
     try arr2.append(lval);
@@ -282,6 +286,20 @@ test "builtinOp / 0" {
     defer lval.deinit();
 
     try std.testing.expectError(LispError.DivideByZero, builtinOp(lval, "/"));
+}
+
+test "builtinOp / ()" {
+    const allocator = std.testing.allocator;
+
+    const emptyArr = std.ArrayList(*Lval).init(allocator);
+    const elval = try Lval.init(allocator, .{ .lvals = emptyArr });
+
+    var arr = std.ArrayList(*Lval).init(allocator);
+    try arr.append(elval);
+    const lval = try Lval.init(allocator, .{ .lvals = arr });
+    defer lval.deinit();
+
+    try std.testing.expectError(LispError.NumberOnly, builtinOp(lval, "/"));
 }
 
 fn lvalPrint(out: std.fs.File.Writer, lvar: *Lval) anyerror!void {
