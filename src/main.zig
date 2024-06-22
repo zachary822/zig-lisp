@@ -33,7 +33,7 @@ const Lval = struct {
                 }
                 lvals.deinit();
             },
-            else => {},
+            .num => {},
         }
         self.allocator.destroy(self);
     }
@@ -131,7 +131,7 @@ pub fn main() !void {
     _ = c.write_history(".history");
 }
 
-fn lvalEvalSexpr(v: *Lval) anyerror!*Lval {
+fn lvalEvalSexpr(v: *Lval) !*Lval {
     for (v.value.lvals.items, 0..) |item, i| {
         v.value.lvals.items[i] = try lvalEval(item);
     }
@@ -149,7 +149,7 @@ fn lvalEvalSexpr(v: *Lval) anyerror!*Lval {
 
     switch (f.value) {
         .sym => |sym| {
-            return builtinOp(v, sym);
+            return try builtinOp(v, sym);
         },
         else => {
             return LispError.SexpressionNotSymbol;
@@ -227,6 +227,7 @@ fn builtinOp(a: *Lval, op: []const u8) !*Lval {
     }
 
     const x = a.value.lvals.orderedRemove(0);
+    errdefer x.deinit();
 
     if (std.mem.eql(u8, op, "-") and a.value.lvals.items.len == 0) {
         x.value.num = -x.value.num;
@@ -247,7 +248,6 @@ fn builtinOp(a: *Lval, op: []const u8) !*Lval {
         }
         if (std.mem.eql(u8, op, "/")) {
             if (y.value.num == 0) {
-                defer x.deinit();
                 return LispError.DivideByZero;
             }
             x.value.num = @divFloor(x.value.num, y.value.num);
@@ -263,10 +263,8 @@ test "builtinOp +" {
     var arr = std.ArrayList(*Lval).init(allocator);
     const num1 = try Lval.init(allocator, .{ .num = 10 });
     const num2 = try Lval.init(allocator, .{ .num = 5 });
-    const num3 = try Lval.init(allocator, .{ .num = 0 });
     try arr.append(num1);
     try arr.append(num2);
-    try arr.append(num3);
     const lval = try Lval.init(allocator, .{ .lvals = arr });
     defer lval.deinit();
 
@@ -368,7 +366,10 @@ fn lvalRead(allocator: std.mem.Allocator, t: [*c]c.mpc_ast_t) !*Lval {
     }
     if (std.mem.containsAtLeast(u8, tag, 1, "symbol")) {
         const sym = try allocator.dupe(u8, std.mem.span(t.*.contents));
-        const lval = Lval.init(allocator, .{ .sym = sym });
+        errdefer allocator.free(sym);
+
+        const lval = try Lval.init(allocator, .{ .sym = sym });
+
         return lval;
     }
 
